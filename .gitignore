@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.venv/
+# keep logs/ as a sample dataset; ignore local Ollama runs
+logs_ollama*/
