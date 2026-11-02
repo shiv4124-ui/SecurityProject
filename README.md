@@ -24,15 +24,26 @@ python3 detect.py
 
 Python 3.9+, standard library only.
 
+```bash
+# 3. Run the same rules on REAL agent logs (Claude Code, OpenAI, Ollama...)
+python3 import_logs.py samples/claude_code_sample.jsonl --out logs_real
+python3 detect.py --events logs_real/events.jsonl --labels none
+```
+
+See `REAL_LOGS.md` for formats, enrichment, and privacy.
+
 ## Files
 
 | File | What it is |
 |---|---|
 | `lab/env.py` | Fake world: emails, files (with a planted canary in secrets), web pages, MCP-style tool servers |
 | `lab/agent.py` | The agent loop, Ollama and mock backends, JSONL logger |
-| `lab/scenarios.py` | 9 benign + 7 attack scenarios |
+| `lab/scenarios.py` | 9 benign + 7 attack scenarios, plus Phase 2 evasions |
+| `lab/importers.py` | Convert real Claude Code / OpenAI / Ollama logs into the event schema |
 | `run_lab.py` | Runs scenarios, writes `logs/events.jsonl` and `logs/labels.jsonl` |
+| `import_logs.py` | Import real logs into `logs_real/events.jsonl` |
 | `detect.py` | Correlation rules R1–R6, combined risk score, metrics and per-session verdicts |
+| `samples/` | Synthetic real-format logs, safe to share |
 
 ## Log schema (`events.jsonl`)
 

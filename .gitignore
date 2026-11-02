@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 # keep logs/ as a sample dataset; ignore local Ollama runs
 logs_ollama*/
+# imported real logs may contain real secrets - never commit them
+logs_real*/

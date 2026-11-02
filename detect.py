@@ -127,7 +127,7 @@ def r6_data_lineage(evs, _):
         elif e["event"] == "egress" and secrets:
             for s in secrets:
                 enc = next((name for name, text in decoded_views(e.get("payload_preview"))
-                            if content_overlap(s["content"], text)), None)
+                            if content_overlap(s.get("secret_material") or s["content"], text)), None)
                 if enc:
                     hits.append({"why": f"content of {s.get('source')} (read at seq {s['seq']}) left to "
                                         f"{e['dest']} {e['seq'] - s['seq']} events later"
@@ -243,7 +243,8 @@ def score(results, labels_path):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--events", default="logs/events.jsonl")
-    p.add_argument("--labels", default="logs/labels.jsonl")
+    p.add_argument("--labels", default="logs/labels.jsonl",
+                   help="ground-truth file; 'none' for real logs (alert-only mode)")
     p.add_argument("--alerts", default="logs/alerts.jsonl")
     p.add_argument("--verbose", action="store_true")
     a = p.parse_args()
@@ -262,7 +263,18 @@ def main():
                 for name, hits in r["rules"].items():
                     for h in hits:
                         print(f"          {name[:2]}: {h['why']}")
-    score(results, a.labels)
+    if a.labels.lower() == "none":
+        fired = {}
+        for r in results.values():
+            for k in r["rules"]:
+                fired[k] = fired.get(k, 0) + 1
+        n_alert = sum(r["alert"] for r in results.values())
+        print(f"\n{len(results)} sessions, {n_alert} alerted (threshold={THRESHOLD}). No labels: alert-only mode.")
+        for k in RULES:
+            print(f"  {k:26} fired in {fired.get(k, 0)} session(s)")
+        print(f"Alerts written to {a.alerts}")
+    else:
+        score(results, a.labels)
 
 
 if __name__ == "__main__":
