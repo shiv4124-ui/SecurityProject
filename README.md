@@ -32,7 +32,7 @@ Python 3.9+, standard library only.
 | `lab/agent.py` | The agent loop, Ollama and mock backends, JSONL logger |
 | `lab/scenarios.py` | 9 benign + 7 attack scenarios |
 | `run_lab.py` | Runs scenarios, writes `logs/events.jsonl` and `logs/labels.jsonl` |
-| `detect.py` | 5 starter correlation rules, combined risk score, metrics table |
+| `detect.py` | Correlation rules R1–R6, combined risk score, metrics and per-session verdicts |
 
 ## Log schema (`events.jsonl`)
 
@@ -68,14 +68,23 @@ Keep your rules away from this file; it is only for scoring.
 | e01–e05 | Phase 2 evasions: delay, base64, sanctioned reply channel, slow-and-quiet, exfil through a GET URL |
 | f01–f03 | Phase 2 tricky benign sessions: user sends a secret home, delegated request, phishing triage |
 
-See `PHASE2.md` for what the evasions broke and the Phase 3 backlog.
+See `PHASE2.md` for what the evasions broke, and `PHASE3.md` for the fixes and
+their measured effect.
+
+## Progress
+
+| Stage | Successful attacks caught | False positives |
+|---|---|---|
+| Phase 1 starter rules, original attacks | 6 / 6 | 0 / 9 |
+| Phase 2 evasions vs. starter rules | 8 / 11 | 1 / 12 |
+| Phase 3 fix 1: data lineage rule (R6) | **11 / 11** | 1 / 12 |
 
 Mock scripts can reference earlier tool results: `$LAST`, `$T3` (3rd result),
 `$B64T3` (base64 of it), `$URLB64T3` (URL-safe base64).
 
 Add your own by copying an entry in `scenarios.py`. `mock_script` only matters in mock mode.
 
-## Mock results (baseline)
+## Mock results (Phase 1 baseline, starter rules R1–R5 only)
 
 ```
 rule                        all attacks  successful  false pos

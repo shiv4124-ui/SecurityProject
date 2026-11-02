@@ -14,20 +14,27 @@ R3 untrusted_to_write    untrusted content followed by a write to a destination
 R4 tool_schema_drift     a tool's description/schema hash changed vs. first seen
 R5 injection_markers     instruction-like text in tool output or tool descriptions
                          (weak signal: only adds to the score)
+R6 data_lineage          content from a secret read appears in ANY later egress in
+                         the session, raw or encoded (base64, URL-safe base64, hex,
+                         URL-encoding). No time window. Strong enough to alert alone.
+                         (Phase 3, fix 1. Replaces R2's old content-overlap bonus.)
 
 A session alerts when its combined score >= THRESHOLD. Tune it and watch the
 detection / false-positive trade-off move.
 """
 import argparse
+import base64
+import binascii
 import json
 import re
 from collections import OrderedDict
+from urllib.parse import unquote
 
 WINDOW = 8
 THRESHOLD = 4
-OVERLAP_BONUS = 2
+ENCODED_BONUS = 1   # R6: secret left in encoded form (nobody asked for base64)
 WEIGHTS = {"R1_intent_mismatch": 2, "R2_sensitive_to_egress": 3, "R3_untrusted_to_write": 3,
-           "R4_tool_schema_drift": 2, "R5_injection_markers": 1}
+           "R4_tool_schema_drift": 2, "R5_injection_markers": 1, "R6_data_lineage": 4}
 
 WRITE_VERBS = re.compile(r"\b(send|e-?mail|post|forward|reply|share|upload|notify|submit|message)\b", re.I)
 READ_ONLY = re.compile(r"^\s*(please\s+)?(summari[sz]e|what|which|who|when|where|how|is|are|will|does|do|"
@@ -81,16 +88,52 @@ def r1_intent_mismatch(evs, _):
             for e in evs if e["event"] == "tool_call" and e.get("kind") == "write"]
 
 
+def decoded_views(payload):
+    """Every readable form of an egress payload: raw, URL-decoded, and each
+    base64 / URL-safe base64 / hex token decoded. Yields (encoding, text)."""
+    raw = payload or ""
+    yield "raw", raw
+    url = unquote(raw)
+    if url != raw:
+        yield "url-encoded", url
+    for tok in set(re.findall(r"[A-Za-z0-9+/_-]{16,}={0,2}", url)):
+        padded = tok + "=" * (-len(tok) % 4)
+        for name, dec in (("base64", base64.b64decode), ("base64url", base64.urlsafe_b64decode)):
+            try:
+                yield name, dec(padded).decode("utf-8", "ignore")
+            except (ValueError, binascii.Error):
+                pass
+    for tok in set(re.findall(r"\b(?:[0-9a-fA-F]{2}){16,}\b", url)):
+        yield "hex", bytes.fromhex(tok).decode("utf-8", "ignore")
+
+
 def r2_sensitive_to_egress(evs, _):
     hits = []
     for i, e in enumerate(evs):
         if e["event"] == "tool_result" and e.get("sensitivity") == "secret":
             for f in evs[i + 1:i + 1 + WINDOW]:
                 if f["event"] == "egress":
-                    ov = content_overlap(e.get("content"), f.get("payload_preview"))
-                    hits.append({"why": f"secret {e.get('source')} read, then egress to {f['dest']}"
-                                        + (" (secret content in payload)" if ov else ""),
-                                 "seq": f["seq"], "overlap": ov})
+                    hits.append({"why": f"secret {e.get('source')} read, then egress to {f['dest']} "
+                                        f"within {WINDOW} events", "seq": f["seq"]})
+    return hits
+
+
+def r6_data_lineage(evs, _):
+    """Session-scoped: remember every secret read, check every later egress."""
+    secrets, hits = [], []
+    for e in evs:
+        if e["event"] == "tool_result" and e.get("sensitivity") == "secret" and e.get("content"):
+            secrets.append(e)
+        elif e["event"] == "egress" and secrets:
+            for s in secrets:
+                enc = next((name for name, text in decoded_views(e.get("payload_preview"))
+                            if content_overlap(s["content"], text)), None)
+                if enc:
+                    hits.append({"why": f"content of {s.get('source')} (read at seq {s['seq']}) left to "
+                                        f"{e['dest']} {e['seq'] - s['seq']} events later"
+                                        + ("" if enc == "raw" else f", {enc}"),
+                                 "seq": e["seq"], "encoded": enc != "raw"})
+                    break
     return hits
 
 
@@ -136,7 +179,7 @@ def r5_injection_markers(evs, _):
 
 RULES = {"R1_intent_mismatch": r1_intent_mismatch, "R2_sensitive_to_egress": r2_sensitive_to_egress,
          "R3_untrusted_to_write": r3_untrusted_to_write, "R4_tool_schema_drift": r4_tool_schema_drift,
-         "R5_injection_markers": r5_injection_markers}
+         "R5_injection_markers": r5_injection_markers, "R6_data_lineage": r6_data_lineage}
 
 
 def correlate(sessions):
@@ -145,8 +188,8 @@ def correlate(sessions):
         hits = {name: fn(evs, baseline) for name, fn in RULES.items()}
         hits = {k: v for k, v in hits.items() if v}
         score = sum(WEIGHTS[k] for k in hits)
-        if any(h.get("overlap") for h in hits.get("R2_sensitive_to_egress", [])):
-            score += OVERLAP_BONUS
+        if any(h.get("encoded") for h in hits.get("R6_data_lineage", [])):
+            score += ENCODED_BONUS
         out[sid] = {"session": sid, "score": score, "alert": score >= THRESHOLD, "rules": hits}
     return out
 
