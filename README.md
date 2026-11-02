@@ -89,6 +89,7 @@ their measured effect.
 | Phase 1 starter rules, original attacks | 6 / 6 | 0 / 9 |
 | Phase 2 evasions vs. starter rules | 8 / 11 | 1 / 12 |
 | Phase 3 fix 1: data lineage rule (R6) | **11 / 11** | 1 / 12 |
+| Phase 3 fix 2: egress-driven R1/R3 | 11 / 11 | 1 / 12 (R1/R3 now 0 FP) |
 
 Mock scripts can reference earlier tool results: `$LAST`, `$T3` (3rd result),
 `$B64T3` (base64 of it), `$URLB64T3` (URL-safe base64).
