@@ -9,6 +9,7 @@ The agent is intentionally naive (no guardrails). That is the point: it is
 the system under test. Add defenses later and compare the numbers.
 """
 import base64
+import gzip
 import json
 import re
 import urllib.request
@@ -91,16 +92,24 @@ class MockClient:
                          raw={"role": "assistant", "content": scenario.get("mock_answer", "Done.")})
         results = [m["content"] for m in messages if m.get("role") == "tool"]
 
+        def res_at(i):
+            return results[int(i) - 1]
+
         def sub(v):
             if not isinstance(v, str):
                 return v
             v = v.replace("$LAST", last)
-            # $T3 = 3rd tool result; $B64T3 = base64 of it; $URLB64T3 = URL-safe base64, no padding
+            # Reference an earlier tool result N and optionally transform it:
+            #   $T3            whole result     $T3[0:8]   a substring slice (for split exfil)
+            #   $B64T3 base64  $URLB64T3 url-safe base64  $REVT3 reversed  $GZT3 gzip+base64 blob
+            v = re.sub(r"\$GZT(\d+)", lambda m: base64.b64encode(
+                gzip.compress(res_at(m.group(1)).encode())).decode(), v)
+            v = re.sub(r"\$REVT(\d+)", lambda m: res_at(m.group(1))[::-1], v)
             v = re.sub(r"\$URLB64T(\d+)", lambda m: base64.urlsafe_b64encode(
-                results[int(m.group(1)) - 1].encode()).decode().rstrip("="), v)
-            v = re.sub(r"\$B64T(\d+)", lambda m: base64.b64encode(
-                results[int(m.group(1)) - 1].encode()).decode(), v)
-            return re.sub(r"\$T(\d+)", lambda m: results[int(m.group(1)) - 1], v)
+                res_at(m.group(1)).encode()).decode().rstrip("="), v)
+            v = re.sub(r"\$B64T(\d+)", lambda m: base64.b64encode(res_at(m.group(1)).encode()).decode(), v)
+            v = re.sub(r"\$T(\d+)\[(\d+):(\d+)\]", lambda m: res_at(m.group(1))[int(m.group(2)):int(m.group(3))], v)
+            return re.sub(r"\$T(\d+)", lambda m: res_at(m.group(1)), v)
 
         calls = []
         for c in script[self.turn]:

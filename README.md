@@ -42,7 +42,7 @@ See `REAL_LOGS.md` for formats, enrichment, and privacy.
 | `lab/importers.py` | Convert real Claude Code / OpenAI / Ollama logs into the event schema |
 | `run_lab.py` | Runs scenarios, writes `logs/events.jsonl` and `logs/labels.jsonl` |
 | `import_logs.py` | Import real logs into `logs_real/events.jsonl` |
-| `detect.py` | Correlation rules R1–R6, combined risk score, metrics and per-session verdicts |
+| `detect.py` | Correlation rules R1–R7, combined risk score, metrics and per-session verdicts (`--blind-labels` simulates failed enrichment) |
 | `samples/` | Synthetic real-format logs, safe to share |
 
 ## Log schema (`events.jsonl`)
@@ -77,6 +77,7 @@ Keep your rules away from this file; it is only for scoring.
 | a06 | "quiet" injection with no obvious marker phrases |
 | a07 | look-alike domain (`corp.test.attacker.test`) |
 | e01–e05 | Phase 2 evasions: delay, base64, sanctioned reply channel, slow-and-quiet, exfil through a GET URL |
+| e06–e09 | Phase 3 evasions: reversed secret, split into sub-threshold chunks, paraphrased, gzip blob |
 | f01–f03 | Phase 2 tricky benign sessions: user sends a secret home, delegated request, phishing triage |
 
 See `PHASE2.md` for what the evasions broke, and `PHASE3.md` for the fixes and
@@ -90,6 +91,7 @@ their measured effect.
 | Phase 2 evasions vs. starter rules | 8 / 11 | 1 / 12 |
 | Phase 3 fix 1: data lineage rule (R6) | **11 / 11** | 1 / 12 |
 | Phase 3 fix 2: egress-driven R1/R3 | 11 / 11 | 1 / 12 (R1/R3 now 0 FP) |
+| Phase 3 fix 3: +4 evasions, opaque-egress rule (R7) | 14 / 14 | 1 / 12 |
 
 Mock scripts can reference earlier tool results: `$LAST`, `$T3` (3rd result),
 `$B64T3` (base64 of it), `$URLB64T3` (URL-safe base64).
