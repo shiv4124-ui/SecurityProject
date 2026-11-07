@@ -30,7 +30,9 @@ python3 import_logs.py samples/claude_code_sample.jsonl --out logs_real
 python3 detect.py --events logs_real/events.jsonl --labels none
 ```
 
-See `REAL_LOGS.md` for formats, enrichment, and privacy.
+See `REAL_LOGS.md` for formats, enrichment, and privacy. The same workflow is
+packaged as a reusable skill at `skills/triage-agent-logs/SKILL.md` — a tool like
+Claude Code picks it up from the repo and can triage any agent log on request.
 
 ## Files
 
